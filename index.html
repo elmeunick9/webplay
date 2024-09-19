@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <!--
+    # License (MIT)
+    Copyright 2024 Robert Planas Jimenez
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+    -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Runtime Video Editor</title>
+    <style>
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        #editorContainer {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            overflow: hidden;
+        }
+
+        #viewport {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 1920px;
+            /* Fixed viewport width */
+            height: 1080px;
+            /* Fixed viewport height */
+            background-color: transparent;
+            transform-origin: top left;
+            /* For scaling from the top-left corner */
+            z-index: 1;
+            overflow: hidden;
+        }
+
+        .layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        #controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            box-sizing: border-box;
+            z-index: 1000;
+        }
+
+        #seekInput {
+            width: 100%;
+            margin-bottom: 10px;
+        }
+
+        #timeDisplay {
+            color: white;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="editorContainer">
+        <div id="viewport">
+            <!-- The layers will go inside the viewport -->
+        </div>
+        <div id="controls">
+            <input type="range" id="seekInput" min="0" max="100" value="0" step="0.01">
+            <div id="timeDisplay">
+                <span id="currentTime">0:00</span> / <span id="totalTime">0:00</span>
+            </div>
+            <button id="playButton">Play</button>
+            <button id="pauseButton">Pause</button>
+            <button id="stopButton">Stop</button>
+            <button id="fullscreenButton">Fullscreen</button>
+            <input type="file" id="fileInput" accept=".js">
+        </div>
+    </div>
+
+    <script>
+        // Tweening functions
+        const tween = {
+            linear: (dt, startTime, startValue, endTime, endValue, fn) => {
+                const progress = (dt - startTime) / (endTime - startTime);
+                if (0 > progress || progress > 1) return
+                const value = startValue + (endValue - startValue) * progress;
+                fn(Math.min(Math.max(value, Math.min(startValue, endValue)), Math.max(startValue, endValue)));
+            },
+            quadratic: (dt, startTime, startValue, endTime, endValue, fn) => {
+                const progress = (dt - startTime) / (endTime - startTime);
+                if (0 > progress || progress > 1) return
+                const value = startValue + (endValue - startValue) * (progress * progress);
+                fn(Math.min(Math.max(value, Math.min(startValue, endValue)), Math.max(startValue, endValue)));
+            }
+        };
+
+        class RuntimeVideoEditor {
+            constructor() {
+                this.layers = {};
+                this.timeline = [];
+                this.currentTime = 0;
+                this.duration = 0;
+                this.isPlaying = false;
+                this.fps = 30;
+                this.interval = null;
+                this.lastUpdateTime = null;
+            }
+
+            loadMedia(layerId, mediaType, source, startTime, endTime, init, callback, trimStart = 0, trimEnd = 0) {
+                const viewport = document.getElementById('viewport');
+                if (!this.layers[layerId]) {
+                    const layerElement = document.createElement('div');
+                    layerElement.className = 'layer';
+                    layerElement.style.zIndex = layerId;
+                    viewport.insertBefore(layerElement, viewport.firstChild);
+                    this.layers[layerId] = layerElement;
+                }
+
+                let mediaElement;
+                if (mediaType === 'video' || mediaType === 'audio') {
+                    mediaElement = document.createElement(mediaType);
+                    mediaElement.src = source;
+                    mediaElement.preload = 'auto';
+                    if (mediaType === 'video') {
+                        mediaElement.style.width = '100%';
+                    }
+                } else if (mediaType === 'image') {
+                    mediaElement = document.createElement('img');
+                    mediaElement.src = source;
+                } else if (mediaType === 'color') {
+                    mediaElement = document.createElement('div');
+                    mediaElement.style.backgroundColor = source;
+                    mediaElement.style.width = '100vw';
+                    mediaElement.style.height = '100vh';
+                } else {
+                    throw new Error('Unsupported media type');
+                }
+
+                this.layers[layerId].appendChild(mediaElement);
+
+                this.timeline.push({
+                    layerId,
+                    mediaElement,
+                    startTime,
+                    endTime,
+                    callback,
+                    trimStart,
+                    trimEnd
+                });
+
+                this.duration = Math.max(this.duration, endTime);
+                this.updateSeekBar();
+
+                init && init(mediaElement);
+            }
+
+            play() {
+                if (!this.isPlaying) {
+                    this.isPlaying = true;
+                    this.update();
+                    this.interval = setInterval(() => this.update(), 1000 / this.fps);
+                }
+            }
+
+            pause() {
+                this.isPlaying = false;
+                this.lastUpdateTime = null;
+                clearInterval(this.interval);
+                this.timeline.forEach(item => {
+                    if (['video', 'audio'].includes(item.mediaElement.tagName.toLowerCase())) {
+                        item.mediaElement.pause();
+                    }
+                });
+            }
+
+            stop() {
+                this.pause();
+                this.seek(0);
+            }
+
+            seek(time) {
+                this.currentTime = Math.max(0, Math.min(time, this.duration));
+                this.lastUpdateTime = null;
+                this.updateSeekBar();
+                this.update(true);
+            }
+
+            update(forceUpdate = false) {
+                const now = performance.now() / 1000;
+
+                if (this.isPlaying) {
+                    if (this.lastUpdateTime === null) {
+                        this.currentTime += 1 / this.fps;
+                    } else {
+                        this.currentTime += now - this.lastUpdateTime;
+                    }
+
+                    if (this.currentTime >= this.duration) {
+                        this.stop();
+                        return;
+                    }
+                }
+
+                this.timeline.forEach(item => {
+                    const globalElapsed = this.currentTime - item.startTime;
+                    const mediaTime = item.trimStart + globalElapsed;
+
+                    if (this.currentTime >= item.startTime && this.currentTime < item.endTime) {
+                        item.mediaElement.style.display = 'block';
+                        if (['video', 'audio'].includes(item.mediaElement.tagName.toLowerCase())) {
+                            const maxMediaTime = item.endTime - item.startTime + item.trimStart - item.trimEnd;
+                            const clampedMediaTime = Math.min(mediaTime, maxMediaTime);
+
+                            const timeDiff = Math.abs(item.mediaElement.currentTime - clampedMediaTime);
+
+                            if (forceUpdate || timeDiff > 2.0) {
+                                item.mediaElement.currentTime = clampedMediaTime;
+                            } else if (timeDiff > 0.1) {
+                                const adjustmentFactor = clampedMediaTime > item.mediaElement.currentTime ? 1.1 : 0.9;
+                                item.mediaElement.playbackRate = adjustmentFactor;
+                            } else {
+                                item.mediaElement.playbackRate = 1.0;
+                            }
+
+                            if (this.isPlaying && item.mediaElement.paused) {
+                                item.mediaElement.play();
+                            }
+                        }
+                        if (item.callback) {
+                            item.callback(item.mediaElement, globalElapsed, item.endTime - item.startTime);
+                        }
+                    } else {
+                        item.mediaElement.style.display = 'none';
+                        if (['video', 'audio'].includes(item.mediaElement.tagName.toLowerCase())) {
+                            item.mediaElement.pause();
+                        }
+                    }
+                });
+
+                this.updateSeekBar();
+                this.lastUpdateTime = now;
+            }
+
+            updateSeekBar() {
+                const seekInput = document.getElementById('seekInput');
+                seekInput.value = (this.currentTime / this.duration) * 100;
+
+                const currentTimeElement = document.getElementById('currentTime');
+                const totalTimeElement = document.getElementById('totalTime');
+                currentTimeElement.textContent = this.formatTime(this.currentTime);
+                totalTimeElement.textContent = this.formatTime(this.duration);
+            }
+
+            formatTime(seconds) {
+                const minutes = Math.floor(seconds / 60);
+                const remainingSeconds = Math.floor(seconds % 60);
+                return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+            }
+
+            loadConfiguration(config) {
+                config.forEach(item => {
+                    this.loadMedia(
+                        item.layerId,
+                        item.mediaType,
+                        item.source,
+                        item.startTime,
+                        item.endTime,
+                        item.init,
+                        item.update,
+                        item.trimStart || 0,
+                        item.trimEnd || 0
+                    );
+                });
+            }
+        }
+
+        // Initialize the editor
+        const editorContainer = document.getElementById('editorContainer');
+        let editor = new RuntimeVideoEditor();
+
+        // Add event listeners to buttons
+        document.getElementById('playButton').addEventListener('click', () => editor.play());
+        document.getElementById('pauseButton').addEventListener('click', () => editor.pause());
+        document.getElementById('stopButton').addEventListener('click', () => editor.stop());
+
+        // Add seek functionality
+        const seekInput = document.getElementById('seekInput');
+        seekInput.addEventListener('input', () => {
+            const seekTime = (seekInput.value / 100) * editor.duration;
+            editor.seek(seekTime);
+        });
+
+        // Add fullscreen functionality
+        const fullscreenButton = document.getElementById('fullscreenButton');
+        fullscreenButton.addEventListener('click', () => {
+            if (!document.fullscreenElement) {
+                editorContainer.requestFullscreen();
+            } else {
+                document.exitFullscreen();
+            }
+        });
+
+        // Add keyboard controls
+        let controlsVisible = true;
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'h' || event.key === 'H') {
+                controlsVisible = !controlsVisible;
+                controls.style.opacity = controlsVisible ? '1' : '0';
+                controls.style.pointerEvents = controlsVisible ? 'auto' : 'none';
+            }
+        });
+
+        // Handle JS file upload and eval
+        document.getElementById('fileInput').addEventListener('change', function (event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const fileContent = e.target.result;
+                editor.stop();
+
+                try {
+                    // Use eval to execute the JS content and inject the exampleConfig
+                    eval(fileContent);
+
+                    if (typeof config === 'object') {
+                        document.querySelectorAll('.layer').forEach(layer => layer.remove());
+                        editor = new RuntimeVideoEditor();
+                        editor.loadConfiguration(config);
+                    } else {
+                        alert("Error processing the file. No config defined.");
+                    }
+                } catch (err) {
+                    console.error("Error evaluating JS file:", err);
+                    alert("Error processing the file. Check console for details.");
+                }
+            };
+
+            reader.readAsText(file);
+        });
+
+        function resizeEditor() {
+            const viewport = document.getElementById('viewport');
+
+            // Get the available screen width and height
+            const windowWidth = window.innerWidth;
+            const windowHeight = window.innerHeight;
+
+            // Define the aspect ratio of the fixed viewport
+            const viewportWidth = 1920;
+            const viewportHeight = 1080;
+            const viewportAspectRatio = viewportWidth / viewportHeight;
+
+            // Calculate the scale to fit the screen while preserving the aspect ratio
+            const screenAspectRatio = windowWidth / windowHeight;
+
+            let scaleFactor;
+            if (screenAspectRatio > viewportAspectRatio) {
+                // Screen is wider, fit by height
+                scaleFactor = windowHeight / viewportHeight;
+            } else {
+                // Screen is taller, fit by width
+                scaleFactor = windowWidth / viewportWidth;
+            }
+
+            // Apply the scale to the viewport
+            viewport.style.transform = `scale(${scaleFactor})`;
+
+            // Center the viewport in the available space
+            const xOffset = (windowWidth - (viewportWidth * scaleFactor)) / 2;
+            const yOffset = (windowHeight - (viewportHeight * scaleFactor)) / 2;
+            viewport.style.left = `${xOffset}px`;
+            viewport.style.top = `${yOffset}px`;
+        }
+
+        // Call resizeEditor initially and on window resize
+        window.addEventListener('resize', resizeEditor);
+        resizeEditor();  // Initial call on page load
+    </script>
+</body>
+
+</html>
