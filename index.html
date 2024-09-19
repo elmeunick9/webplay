@@ -110,7 +110,7 @@
             return a + (b - a) * val;
         }
 
-        function inRange(v, a=0, b=1) {
+        function inRange(v, a = 0, b = 1) {
             return Math.min(a, b) <= v && v <= Math.max(a, b);
         }
 
@@ -119,7 +119,7 @@
             // Linear interpolation
             linear: (dt, startTime, startValue, endTime, endValue, fn) => {
                 const x = normalize(dt, startTime, endTime); if (!inRange(x)) return;
-                fn(lerp( x , startValue, endValue));
+                fn(lerp(x, startValue, endValue));
             },
 
             // Cubic spline interpolation
@@ -144,19 +144,19 @@
             // Ease-In Quad
             easeInQuad: (dt, startTime, startValue, endTime, endValue, fn) => {
                 const x = normalize(dt, startTime, endTime); if (!inRange(x)) return;
-                fn(lerp( x*x , startValue, endValue));
+                fn(lerp(x * x, startValue, endValue));
             },
 
             // Ease-Out Quad
             easeOutQuad: (dt, startTime, startValue, endTime, endValue, fn) => {
                 const x = normalize(dt, startTime, endTime); if (!inRange(x)) return;
-                fn(lerp( 1 - (1 - x) * (1 - x) , startValue, endValue));
+                fn(lerp(1 - (1 - x) * (1 - x), startValue, endValue));
             },
 
             // Ease-In-Out Quad
             easeInOutQuad: (dt, startTime, startValue, endTime, endValue, fn) => {
                 const x = normalize(dt, startTime, endTime); if (!inRange(x)) return;
-                fn(lerp( x < 0.5 ? 2 * x * x : 1 - pow(-2 * x + 2, 2) / 2 , startValue, endValue));
+                fn(lerp(x < 0.5 ? 2 * x * x : 1 - pow(-2 * x + 2, 2) / 2, startValue, endValue));
             },
 
             // Alias
@@ -166,22 +166,25 @@
 
             // Ease-In Sine
             easeInSine: (dt, startTime, startValue, endTime, endValue, fn) => {
-                 const x = normalize(dt, startTime, endTime); if (!inRange(x)) return;
-                 fn(lerp( 1 - Math.cos((x * Math.PI) / 2) , startValue, endValue));
+                const x = normalize(dt, startTime, endTime); if (!inRange(x)) return;
+                fn(lerp(1 - Math.cos((x * Math.PI) / 2), startValue, endValue));
             },
 
             // Ease-Out Sine
             easeOutSine: (dt, startTime, startValue, endTime, endValue, fn) => {
                 const x = normalize(dt, startTime, endTime); if (!inRange(x)) return;
-                fn(lerp( Math.sin((x * Math.PI) / 2) , startValue, endValue));
+                fn(lerp(Math.sin((x * Math.PI) / 2), startValue, endValue));
             },
 
             // Ease-In-Out Sine
             easeInOutSine: (dt, startTime, startValue, endTime, endValue, fn) => {
                 const x = normalize(dt, startTime, endTime); if (!inRange(x)) return;
-                fn(lerp( -(Math.cos(Math.PI * x) - 1) / 2 , startValue, endValue));
+                fn(lerp(-(Math.cos(Math.PI * x) - 1) / 2, startValue, endValue));
             }
         };
+
+        // Create a global AudioContext instance and store it on window
+        window.audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
         class RuntimeVideoEditor {
             constructor() {
@@ -195,7 +198,9 @@
                 this.lastUpdateTime = null;
             }
 
-            loadMedia(layerId, mediaType, source, startTime, endTime, init, callback, trimStart = 0, trimEnd = 0) {
+            loadMedia(it) {
+                const layerId = it.layerId;
+                const mediaType = it.mediaType;
                 const viewport = document.getElementById('viewport');
                 if (!this.layers[layerId]) {
                     const layerElement = document.createElement('div');
@@ -208,19 +213,18 @@
                 let mediaElement;
                 if (mediaType === 'video' || mediaType === 'audio') {
                     mediaElement = document.createElement(mediaType);
-                    mediaElement.src = source;
+                    mediaElement.src = it.source;
                     mediaElement.preload = 'auto';
                     if (mediaType === 'video') {
                         mediaElement.style.width = '100%';
                     }
                 } else if (mediaType === 'image') {
                     mediaElement = document.createElement('img');
-                    mediaElement.src = source;
-                } else if (mediaType === 'color') {
+                    mediaElement.src = it.source;
+                } else if (mediaType === 'block') {
                     mediaElement = document.createElement('div');
-                    mediaElement.style.backgroundColor = source;
-                    mediaElement.style.width = '100vw';
-                    mediaElement.style.height = '100vh';
+                    mediaElement.style.width = '100%';
+                    mediaElement.style.height = '100%';
                 } else {
                     throw new Error('Unsupported media type');
                 }
@@ -230,22 +234,30 @@
                 this.timeline.push({
                     layerId,
                     mediaElement,
-                    startTime,
-                    endTime,
-                    callback,
-                    trimStart,
-                    trimEnd
+                    startTime: it.startTime,
+                    endTime: it.endTime,
+                    callback: it.update,
+                    onStart: it.start,
+                    onEnd: it.end,
+                    onPause: it.pause,
+                    onPlay: it.play,
+                    trimStart: it.trimStart || 0,
+                    trimEnd: it.trimEnd || 0,
                 });
 
-                this.duration = Math.max(this.duration, endTime);
+                this.duration = Math.max(this.duration, it.endTime);
                 this.updateSeekBar();
 
-                init && init(mediaElement);
+                mediaElement.style.display = 'none';
+                it.init && it.init(mediaElement);
             }
 
             play() {
                 if (!this.isPlaying) {
                     this.isPlaying = true;
+                    this.timeline.forEach(item => {
+                        item.onPlay && item.onPlay(item.mediaElement);
+                    })
                     this.update();
                     this.interval = setInterval(() => this.update(), 1000 / this.fps);
                 }
@@ -259,6 +271,7 @@
                     if (['video', 'audio'].includes(item.mediaElement.tagName.toLowerCase())) {
                         item.mediaElement.pause();
                     }
+                    item.onPause && item.onPause(item.mediaElement);
                 });
             }
 
@@ -295,6 +308,7 @@
                     const mediaTime = item.trimStart + globalElapsed;
 
                     if (this.currentTime >= item.startTime && this.currentTime < item.endTime) {
+                        const isStart = item.mediaElement.style.display === 'none';
                         item.mediaElement.style.display = 'block';
                         if (['video', 'audio'].includes(item.mediaElement.tagName.toLowerCase())) {
                             const maxMediaTime = item.endTime - item.startTime + item.trimStart - item.trimEnd;
@@ -315,11 +329,15 @@
                                 item.mediaElement.play();
                             }
                         }
+                        if (isStart) {
+                            item.onStart && item.onStart(item.mediaElement);
+                        }
                         if (item.callback) {
                             item.callback(item.mediaElement, globalElapsed, item.endTime - item.startTime);
                         }
                     } else {
                         item.mediaElement.style.display = 'none';
+                        item.onEnd && item.onEnd(item.mediaElement);
                         if (['video', 'audio'].includes(item.mediaElement.tagName.toLowerCase())) {
                             item.mediaElement.pause();
                         }
@@ -348,17 +366,7 @@
 
             loadConfiguration(config) {
                 config.forEach(item => {
-                    this.loadMedia(
-                        item.layerId,
-                        item.mediaType,
-                        item.source,
-                        item.startTime,
-                        item.endTime,
-                        item.init,
-                        item.update,
-                        item.trimStart || 0,
-                        item.trimEnd || 0
-                    );
+                    this.loadMedia(item);
                 });
             }
         }
@@ -366,6 +374,7 @@
         // Initialize the editor
         const editorContainer = document.getElementById('editorContainer');
         let editor = new RuntimeVideoEditor();
+        window.editor = editor;
 
         // Add event listeners to buttons
         document.getElementById('playButton').addEventListener('click', () => editor.play());
@@ -424,6 +433,7 @@
                         document.querySelectorAll('.layer').forEach(layer => layer.remove());
                         editor = new RuntimeVideoEditor();
                         editor.loadConfiguration(config);
+                        window.editor = editor;
                     } else {
                         alert("Error processing the file. No config defined.");
                     }

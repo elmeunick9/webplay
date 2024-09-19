@@ -107,6 +107,13 @@ config = [
 
 Note that the `time` parameter is the time in seconds since the `startTime` of the track. The `init` handler is called on file load, while the `update` handler is called continuously between `startTime` and `endTime`.
 
+Additionally the following handlers are also available:
+
+* `start`: Called just once before `update` when the track begins.
+* `end`: Called just once the frame after the last `update` when the track ends.
+* `play`: Called whenever the the player starts playing.
+* `pause`: Called whenever the player pauses or stops playing.
+
 ### Tween
 
 Included in the `index.html` code there is super-tiny tween library implementation. The usage is as follows:
@@ -302,6 +309,71 @@ config = [
     ...Array(50).fill(null).map(createImageTrack)
 ]
 ```
+
+## Block Media Types
+
+Besides video and audio, you can also create a standard `div` element and customize it as you see fit in JS. Example:
+
+```
+{
+    layerId: 3,
+    mediaType: 'block',
+    startTime: 5,
+    endTime: 8,
+    init: (element) => {
+        element.style.opacity = 0.7;
+        element.style.backgroundColor = 'green';
+    },
+},
+{
+    layerId: 4,
+    mediaType: 'block',
+    startTime: 5,
+    endTime: 8,
+    init: (element) => {
+        element.style.marginTop = '400px';
+        element.style.textAlign = 'center';
+        element.style.color = 'white';
+        element.style.fontSize = '130px';
+    },
+    update: (element, time, duration) => {
+        element.innerHTML = `Count Down: ${(Math.ceil(duration - time)).toFixed(0)}`
+    }
+}
+```
+
+This allows for very deep customization and dynamic behavior. With this you can implement solid color backgrounds, gradients, text, subtitles, etc.
+
+### Beat Player
+
+Using block media types we can implement an oscillator / metronome. Check the `BeatPlayer` class for reference in the `helpers.js` file.
+
+Example:
+
+```
+{
+    layerId: 5,
+    mediaType: 'block',
+    startTime: 2,
+    endTime: 8,
+    init: (element) => {
+        element.beatPlayer = new BeatPlayer(); 
+    },
+    start: (element) => {
+        element.beatPlayer.startBeat(2);
+    },
+    end: (element) => {
+        element.beatPlayer.stopBeat();
+    },
+    play: (element) => {
+        element.beatPlayer.volume = 1;
+    },
+    pause: (element) => {
+        element.beatPlayer.volume = 0;
+    }
+}
+```
+
 
 # License (MIT)
 

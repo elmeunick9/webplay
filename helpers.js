@@ -111,3 +111,60 @@ const repeat = (track, times = 2, fn) => {
     fn && fn(track.startTime + duration * times);
     return arr;
 }
+
+class BeatPlayer {
+    constructor() {
+        this.audioContext = window.audioContext;
+        this.nextBeatTime = 0;
+        this.timeoutId = null;
+        this.isPlaying = false;
+        this.currentFrequency = 2;
+    }
+
+    playBeat(frequency = 220, duration = 0.2) {
+        const oscillator = this.audioContext.createOscillator();
+        const gainNode = this.audioContext.createGain();
+        oscillator.connect(gainNode);
+        gainNode.connect(this.audioContext.destination);
+
+        oscillator.frequency.setValueAtTime(frequency, this.audioContext.currentTime);
+        oscillator.type = 'sine';
+
+        gainNode.gain.setValueAtTime(this.volume ?? 1, this.audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, this.audioContext.currentTime + duration);
+
+        oscillator.start();
+        oscillator.stop(this.audioContext.currentTime + duration);
+    }
+
+    scheduleBeat() {
+        const currentTime = this.audioContext.currentTime;
+        
+        if (this.nextBeatTime <= currentTime) {
+            this.playBeat();
+            this.nextBeatTime = currentTime + (1 / this.currentFrequency);
+        }
+
+        const timeUntilNextBeat = (this.nextBeatTime - currentTime) * 1000;
+        this.timeoutId = setTimeout(() => this.scheduleBeat(), timeUntilNextBeat);
+    }
+
+    startBeat(frequency = 2) {
+        if (this.isPlaying) {
+            this.stopBeat();
+        }
+
+        this.isPlaying = true;
+        this.currentFrequency = frequency;
+        this.nextBeatTime = this.audioContext.currentTime;
+        this.scheduleBeat();
+    }
+
+    stopBeat() {
+        this.isPlaying = false;
+        if (this.timeoutId !== null) {
+            clearTimeout(this.timeoutId);
+            this.timeoutId = null;
+        }
+    }
+}

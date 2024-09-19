@@ -23,5 +23,30 @@ config = [
             });
             tween.linear(time, 0, 0, duration, 1, value => element.style.opacity = value);
         }
-    }
+    },
+    {
+        layerId: 3,
+        mediaType: 'block',
+        startTime: 5,
+        endTime: 8,
+        init: (element) => {
+            element.style.opacity = 0.7;
+            element.style.backgroundColor = 'green';
+        },
+    },
+    {
+        layerId: 4,
+        mediaType: 'block',
+        startTime: 5,
+        endTime: 8,
+        init: (element) => {
+            element.style.marginTop = '400px';
+            element.style.textAlign = 'center';
+            element.style.color = 'white';
+            element.style.fontSize = '130px';
+        },
+        update: (element, time, duration) => {
+            element.innerHTML = `Count Down: ${(Math.ceil(duration - time)).toFixed(0)}`
+        }
+    },
 ]
