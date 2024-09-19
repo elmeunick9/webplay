@@ -327,6 +327,13 @@
                 controls.style.opacity = controlsVisible ? '1' : '0';
                 controls.style.pointerEvents = controlsVisible ? 'auto' : 'none';
             }
+            if (event.key === 'Space' || event.key === ' ') {
+                if (editor.isPlaying) {
+                    editor.pause();
+                } else {
+                    editor.play();
+                }
+            }
         });
 
         // Handle JS file upload and eval

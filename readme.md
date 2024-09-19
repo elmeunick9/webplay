@@ -21,7 +21,7 @@ This program is not a UI for creating videos! The only interface available is fo
     * Change the video resolution (by default 1920x1080) and the animations framerate (by default 30fps).
     * Inject your playback JS file directly and remove the browse button, then upload everything into a static file server (e.g a bucket, or GitHub Pages, etc) to share the video.
     * Create your custom tweening functions or use a library.
- * To render the result into a real video you may use a screen capture program and play the video on full-screen with the toolbar hidden (press H key).
+ * To render the result into a real video you may use a screen capture program and play the video on full-screen with the toolbar hidden (press H key & space).
  * You have the full power of JS for video edition, use it, see `helpers.js` for examples on how to do some cool stuff, but also feel free to implement your own.
 
 # Editing
@@ -278,7 +278,7 @@ Once you have the array you can create a function to generate a track from a ran
 
 ```
 const createImageTrack = () => ({
-    layerId: layer,
+    layerId: 1,
     mediaType: 'image',
     source: pick(images),
     startTime: t("+ 00:00"),
