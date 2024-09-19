@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <!--
     # License (MIT)
@@ -97,19 +98,88 @@
     </div>
 
     <script>
+        function clamp(val, a, b) {
+            return Math.min(Math.max(val, Math.min(a, b)), Math.max(a, b));
+        }
+
+        function normalize(value, start, end) {
+            return (value - start) / (end - start);
+        }
+
+        function lerp(val, a, b) {
+            return a + (b - a) * val;
+        }
+
+        function inRange(v, a=0, b=1) {
+            return Math.min(a, b) <= v && v <= Math.max(a, b);
+        }
+
         // Tweening functions
         const tween = {
+            // Linear interpolation
             linear: (dt, startTime, startValue, endTime, endValue, fn) => {
-                const progress = (dt - startTime) / (endTime - startTime);
-                if (0 > progress || progress > 1) return
-                const value = startValue + (endValue - startValue) * progress;
-                fn(Math.min(Math.max(value, Math.min(startValue, endValue)), Math.max(startValue, endValue)));
+                const x = normalize(dt, startTime, endTime); if (!inRange(x)) return;
+                fn(lerp( x , startValue, endValue));
             },
+
+            // Cubic spline interpolation
+            spline: (dt, startTime, startValue, endTime, endValue, controlPoints, fn) => {
+                const t = normalize(dt, startTime, endTime); if (!inRange(t)) return;
+
+                // Ensure controlPoints length is 4
+                const p0 = controlPoints[0] || startValue;
+                const p1 = controlPoints[1] || startValue;
+                const p2 = controlPoints[2] || endValue;
+                const p3 = controlPoints[3] || endValue;
+
+                // Cubic interpolation formula
+                const value = (1 - t) ** 3 * p0 +
+                    3 * (1 - t) ** 2 * t * p1 +
+                    3 * (1 - t) * t ** 2 * p2 +
+                    t ** 3 * p3;
+
+                fn(value);
+            },
+
+            // Ease-In Quad
+            easeInQuad: (dt, startTime, startValue, endTime, endValue, fn) => {
+                const x = normalize(dt, startTime, endTime); if (!inRange(x)) return;
+                fn(lerp( x*x , startValue, endValue));
+            },
+
+            // Ease-Out Quad
+            easeOutQuad: (dt, startTime, startValue, endTime, endValue, fn) => {
+                const x = normalize(dt, startTime, endTime); if (!inRange(x)) return;
+                fn(lerp( 1 - (1 - x) * (1 - x) , startValue, endValue));
+            },
+
+            // Ease-In-Out Quad
+            easeInOutQuad: (dt, startTime, startValue, endTime, endValue, fn) => {
+                const x = normalize(dt, startTime, endTime); if (!inRange(x)) return;
+                fn(lerp( x < 0.5 ? 2 * x * x : 1 - pow(-2 * x + 2, 2) / 2 , startValue, endValue));
+            },
+
+            // Alias
             quadratic: (dt, startTime, startValue, endTime, endValue, fn) => {
-                const progress = (dt - startTime) / (endTime - startTime);
-                if (0 > progress || progress > 1) return
-                const value = startValue + (endValue - startValue) * (progress * progress);
-                fn(Math.min(Math.max(value, Math.min(startValue, endValue)), Math.max(startValue, endValue)));
+                this.easeInOutQuad(dt, startTime, startValue, endTime, endValue, fn);
+            },
+
+            // Ease-In Sine
+            easeInSine: (dt, startTime, startValue, endTime, endValue, fn) => {
+                 const x = normalize(dt, startTime, endTime); if (!inRange(x)) return;
+                 fn(lerp( 1 - Math.cos((x * Math.PI) / 2) , startValue, endValue));
+            },
+
+            // Ease-Out Sine
+            easeOutSine: (dt, startTime, startValue, endTime, endValue, fn) => {
+                const x = normalize(dt, startTime, endTime); if (!inRange(x)) return;
+                fn(lerp( Math.sin((x * Math.PI) / 2) , startValue, endValue));
+            },
+
+            // Ease-In-Out Sine
+            easeInOutSine: (dt, startTime, startValue, endTime, endValue, fn) => {
+                const x = normalize(dt, startTime, endTime); if (!inRange(x)) return;
+                fn(lerp( -(Math.cos(Math.PI * x) - 1) / 2 , startValue, endValue));
             }
         };
 
