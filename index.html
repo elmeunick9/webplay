@@ -156,7 +156,7 @@
             // Ease-In-Out Quad
             easeInOutQuad: (dt, startTime, startValue, endTime, endValue, fn) => {
                 const x = normalize(dt, startTime, endTime); if (!inRange(x)) return;
-                fn(lerp(x < 0.5 ? 2 * x * x : 1 - pow(-2 * x + 2, 2) / 2, startValue, endValue));
+                fn(lerp(x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2, startValue, endValue));
             },
 
             // Alias
