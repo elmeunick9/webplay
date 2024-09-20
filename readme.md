@@ -4,6 +4,19 @@ It does not render real video, instead it can be used to load standard media and
 
 This program is not a UI for creating videos! The only interface available is for playback. Videos are edited directly in a JS file that can be loaded from the player.
 
+As such the use-case is for creating interactive visualizations that do not depend on precise short-cuts, for instance:
+
+ * A slideshow presentation with random images that do not repeat.
+ * A montage of multiple videos or scenes arranged in a specific way or randomly.
+ * A voice-over commentary on an existing video/movie/comic.
+ * An audio-book enhancement with music and SFX that the original is missing.
+
+What this project is not suitable for:
+ * Producing professional video.
+ * Creating cuts for a scene (e.g. a movie).
+ * Post-processing effects.
+ * Creating choose-your-own-adventure style game or Visual Novel.
+
 # How to install
  * Download `index.html` in a folder in your computer.
  * Place any resources you want to load in the same folder (or subfolder).
@@ -14,7 +27,10 @@ This program is not a UI for creating videos! The only interface available is fo
 
 ## Gotchas
  * When loading resources from a URL you may need to wait a bit for the resources to download before attempting to play.
- * Seeking on video is approximate, the playback will try to autocorrect by slightly changing the video speed as needed.
+ * There are many features that can not be implemented in the browser, such as:
+    * Seeking on video is approximate, the playback will try to autocorrect by slightly changing the video speed as needed, but when looping expect a non-consistent 1~2 second difference vs the specified time.
+    * Playing the video in reverse it is not possible.
+    * Some formats such as `.mkv` may not be supported on some browsers (e.g. FireFox).
 
 ## Tricks
  * Edit the code of index.html directly to suit your needs. By doing so you can:
@@ -29,7 +45,7 @@ This program is not a UI for creating videos! The only interface available is fo
 ## Basic usage
 Your playback file should export a global `config` array where each item represents a track in the video. Tracks must be placed on a layer, where 1 is the bottom layer. Two tracks can not overlap on the same layer. Time is always in seconds. The order of the tracks does not matter, but they must specify start and end times. Example:
 
-```
+```js
 config = [
     // Video tracks
     {
@@ -62,7 +78,7 @@ config = [
 
 You can trim from the start or end of any video or audio using the optional `trimStart` and `trimEnd` properties. Example:
 
-```
+```js
 config = [
     {
         layerId: 1,
@@ -87,7 +103,7 @@ config = [
 
 Animations are performed through the `init` and `update` handlers. These properties take the created HTML element as parameter and can be used to modify it directly. Example:
 
-```
+```js
 config = [
     {
         layerId: 1,
@@ -118,15 +134,16 @@ Additionally the following handlers are also available:
 
 Included in the `index.html` code there is super-tiny tween library implementation. The usage is as follows:
 
-```
+```js
 tween.linear(time, startTime, startValue, endTime, endValue, fn)
 tween.quadratic(time, startTime, startValue, endTime, endValue, fn)
 ```
 
 Example:
-```
+
+```js
 config = [{
-    [...]
+    // [...]
     update: (element, time, duration) => {
         tween.linear(time, 0, 0, duration/2, 1, value => {
             element.style.opacity = value
@@ -146,7 +163,7 @@ Tween have no effect outside the time-frame specified, that means that out of bo
 
 This effects are common and can be implemented using the tween functions as follows:
 
-```
+```js
 const fade = (time, duration, span, max, fn) => {
     // Fade-in
     tween.quadratic(time, 0, 0, span, max, fn)
@@ -163,7 +180,7 @@ This is a standard utility function that you can find in `helpers.js`, just copy
 
 You can use that function for volume instead of opacity as follows:
 
-```
+```js
 update: (element, time, duration) => {
     fade(time, duration, 10, 0.5, x => element.volume = x)
 }
@@ -189,7 +206,7 @@ tween.linear(time, 0, 0, duration, 360*duration, value => {
 
 A basic timer functionality is implemented in the `helpers.js` file. It allows to use strings to specify time, as well as add or subtract time to the last timed value. E.g:
 
-```
+```js
 t(10)           = 10
 t("10")         = 10
 t("10s")        = 10
@@ -205,7 +222,7 @@ t("- 1m")       = 12.6 + 3 + 60*1 - 60*1
 
 You can use it to define tracks based on previous values like so:
 
-```
+```js
 config = [
     {
         layerId: 1,
@@ -228,7 +245,7 @@ config = [
 
 You can make functions that generate one or more tracks, an example for this is the included `repeat` function:
 
-```
+```js
 repeat(track, times = 2, fn = undefined)
 ```
 
@@ -236,7 +253,7 @@ You can use this function to insert a number of consecutive repetitions of the s
 
 Example:
 
-```
+```js
 config = [
     ...repeat({
         layerId: 1,
@@ -271,7 +288,7 @@ You should get something like this:
 
 We need to transform this into an array format:
 
-```
+```js
 const images = [
     "1600008809347.png",
     "676DD33A11D.jpg",
@@ -283,7 +300,7 @@ To do this you can either ask a LLM (ChatGPT), or use the multi-cursor feature o
 
 Once you have the array you can create a function to generate a track from a random image using the included `pick` function, e.g:
 
-```
+```js
 const createImageTrack = () => ({
     layerId: 1,
     mediaType: 'image',
@@ -304,7 +321,7 @@ const createImageTrack = () => ({
 
 Then you use it like this:
 
-```
+```js
 config = [
     ...Array(50).fill(null).map(createImageTrack)
 ]
@@ -314,7 +331,7 @@ config = [
 
 Besides video and audio, you can also create a standard `div` element and customize it as you see fit in JS. Example:
 
-```
+```js
 {
     layerId: 3,
     mediaType: 'block',
@@ -350,7 +367,7 @@ Using block media types we can implement an oscillator / metronome. Check the `B
 
 Example:
 
-```
+```js
 {
     layerId: 5,
     mediaType: 'block',
